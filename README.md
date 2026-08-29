@@ -1,6 +1,6 @@
 # RRK OCR search
 
-Downloads Official Gazette page scans from [ocr.rrk.ir](https://ocr.rrk.ir/) for a Jalali date range, then searches Persian phrases in the images. Matching images are copied to `result/`.
+Downloads Official Gazette page scans from [ocr.rrk.ir](https://ocr.rrk.ir/) for a Jalali date range, then runs local OCR to find Persian phrases in the images. Matching images are copied to `result/`.
 
 ## Setup
 
@@ -27,19 +27,15 @@ After this you can freely switch `OCR_ENGINE` in `.env` without reinstalling any
 > **Do not** run `uv sync` on its own to add packages — always use `.\setup.ps1`, which keeps the GPU wheel intact.
 
 
-
 ## Choose an OCR engine
 
 Set `OCR_ENGINE` in `.env`:
-
 
 | Value       | When to use                                                                                            |
 | ----------- | ------------------------------------------------------------------------------------------------------ |
 | `paddleocr` | Best accuracy on noisy scans. Uses GPU automatically if available.                                     |
 | `tesseract` | Best for clear printed Persian text. Requires Tesseract + `fas` language pack installed on the system. |
 | `easyocr`   | Simple to use; weaker on old newspaper scans.                                                          |
-
-
 
 
 ### PaddleOCR
@@ -53,10 +49,8 @@ Set `OCR_ENGINE=paddleocr` and `OCR_PADDLE_LANG=fa` (Persian; `arabic` is also a
 ### Tesseract
 
 1. Install [Tesseract](https://github.com/UB-Mannheim/tesseract/wiki) on Windows.
-2. During setup, select language data **Persian (**`fas`**)** (and Arabic if available).
+2. During setup, select language data **Persian (`fas`)** (and Arabic if available).
 3. Set `OCR_ENGINE=tesseract` and `OCR_TESSERACT_LANG=fas+ara`.
-
-
 
 ### EasyOCR
 
@@ -81,10 +75,10 @@ Tesseract has no GPU path — it always uses CPU workers only.
 Run with uv so the project virtualenv is used:
 
 ```powershell
-# Download pages and search via site API:
+# Download all page images:
 uv run python search.py
 
-# Run local OCR only on already-downloaded images in images/:
+# Run local OCR only on already-downloaded images:
 uv run python search.py --ocr-only
 
 # Download, then also run local OCR:
@@ -94,18 +88,15 @@ uv run python search.py --local-ocr
 uv run python search.py --ocr-only --ocr-engine tesseract
 ```
 
-
-
 ## `.env` keys
-
 
 | Key                         | Description                                                     |
 | --------------------------- | --------------------------------------------------------------- |
 | `RRK_COOKIE`                | `cookiesession1` from the browser (optional)                    |
 | `START_DATE` / `END_DATE`   | Jalali date range, e.g. `1360-01-01` … `1360-12-29`             |
-| `SEARCH_PHRASES`            | Phrases separated by `|`, e.g. `متالیک|3957411|غفاری`           |
-| `OCR_ENGINE`                | `paddleocr` \| `tesseract` \| `easyocr` \| `all`          |
-| `OCR_USE_GPU`               | `true` / `false` — PaddleOCR only                               |
+| `SEARCH_PHRASES`            | Phrases separated by `|`, e.g. `متالیک|39574|غفاری`             |
+| `OCR_ENGINE`                | `paddleocr` \| `tesseract` \| `easyocr`                         |
+| `OCR_USE_GPU`               | `true` / `false` — PaddleOCR and EasyOCR only                   |
 | `OCR_PADDLE_LANG`           | `fa` for Persian (alias: `arabic`)                              |
 | `OCR_TESSERACT_LANG`        | Tesseract language codes, e.g. `fas+ara`                        |
 | `IMAGES_DIR` / `RESULT_DIR` | Directories for downloaded and matched images                   |
@@ -114,19 +105,13 @@ uv run python search.py --ocr-only --ocr-engine tesseract
 | `OCR_CPU_WORKERS`           | CPU inference threads running alongside GPU (default auto)      |
 | `VERIFY_SSL`                | `false` to skip SSL verification (site has an incomplete chain) |
 
-
-
-
 ## Output
-
 
 | Path                            | Contents                                                        |
 | ------------------------------- | --------------------------------------------------------------- |
 | `images/`                       | Downloaded page JPEGs                                           |
 | `result/`                       | Matching page JPEGs — copied immediately when a phrase is found |
 | `result/ocr_hits.jsonl`         | One JSON record per match: `{"file": "…", "phrases": […]}`      |
-| `checkpoint.json`               | Download/search resume state                                    |
+| `checkpoint.json`               | Download resume state                                           |
 | `ocr_checkpoint_<engine>.jsonl` | OCR resume progress — one record appended per processed image   |
 | `index.jsonl`                   | Listing records from the site                                   |
-
-

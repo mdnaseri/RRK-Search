@@ -58,9 +58,9 @@ def make_session(cookie: str | None) -> requests.Session:
     return session
 
 
-def fetch_page(session: requests.Session, page: int, news_text: str = "") -> dict:
+def fetch_page(session: requests.Session, page: int) -> dict:
     params = {
-        "NewsText": news_text,
+        "NewsText": "",
         "startTime": config.START_DATE,
         "number": "",
         "page": page,
@@ -204,10 +204,6 @@ def empty_checkpoint() -> dict:
         "list_page_size": None,
         "list_done": False,
         "downloaded": {},
-        "search_phrase_index": 0,
-        "search_next_page": 0,
-        "search_done": False,
-        "hit_codes": [],
     }
 
 
@@ -217,7 +213,6 @@ def load_checkpoint(path: Path) -> dict:
     data = empty_checkpoint()
     data.update(json.loads(path.read_text(encoding="utf-8")))
     data.setdefault("downloaded", {})
-    data.setdefault("hit_codes", [])
     return data
 
 
@@ -226,16 +221,6 @@ def append_index(index_path: Path, items: list[dict]) -> None:
         for item in items:
             handle.write(json.dumps(item, ensure_ascii=False) + "\n")
 
-
-def copy_hit(item: dict, mapping: dict[str, str], result_dir: Path, cookie: str | None) -> None:
-    result_dir.mkdir(parents=True, exist_ok=True)
-    code = str(item["Code"])
-    src = mapping.get(code)
-    if src and Path(src).exists():
-        dest = result_dir / Path(src).name
-        shutil.copy2(src, dest)
-        return
-    download_one(cookie, item, result_dir)
 
 
 def run_local_ocr(
@@ -322,7 +307,7 @@ def run_local_ocr(
                 dest = result_dir / path.name
                 if path.resolve() != dest.resolve():
                     shutil.copy2(path, dest)
-                append_jsonl(hits_path, {"file": path.name, "phrases": phrases})
+                append_jsonl(hits_path, {"file": path.name, "phrases": phrases, "source": "ocr"})
                 print(f"  OCR hit: {path.name} ({', '.join(phrases)})", flush=True)
             append_jsonl(progress_path, {"file": path.name, "engine": engine_name})
             completed += 1
@@ -400,7 +385,7 @@ def run_listing(session: requests.Session, cookie: str | None, args: argparse.Na
 
     page = start_page
     while True:
-        payload = fetch_page(session, page, news_text="")
+        payload = fetch_page(session, page)
         chunk = list(payload.get("data") or [])
         total = int(payload.get("count") or 0)
         page_size = len(chunk) or int(state.get("list_page_size") or 5)
@@ -444,59 +429,6 @@ def run_listing(session: requests.Session, cookie: str | None, args: argparse.Na
     return state
 
 
-def run_search(session: requests.Session, cookie: str | None, args: argparse.Namespace, root: Path, state: dict) -> dict:
-    result_dir = root / args.result_dir
-    checkpoint_path = root / args.checkpoint
-
-    if state.get("search_done"):
-        print("Search already complete.")
-        return state
-
-    hit_codes = set(state.get("hit_codes") or [])
-    phrase_index = int(state.get("search_phrase_index") or 0)
-    page = int(state.get("search_next_page") or 0)
-
-    print("Searching site OCR text (NewsText)...")
-    while phrase_index < len(config.SEARCH_PHRASES):
-        phrase = config.SEARCH_PHRASES[phrase_index]
-        print(f"  phrase {phrase_index + 1}/{len(config.SEARCH_PHRASES)}: {phrase} (from page {page})")
-        while True:
-            payload = fetch_page(session, page, news_text=phrase)
-            chunk = list(payload.get("data") or [])
-            total = int(payload.get("count") or 0)
-            page_size = len(chunk) or 5
-            total_pages = (total + page_size - 1) // page_size if total else 0
-
-            for item in chunk:
-                code = str(item["Code"])
-                if code in hit_codes:
-                    continue
-                hit_codes.add(code)
-                copy_hit(item, state["downloaded"], result_dir, cookie)
-                print(f"    hit -> {safe_filename(item)}")
-
-            page += 1
-            state["search_phrase_index"] = phrase_index
-            state["search_next_page"] = page
-            state["hit_codes"] = sorted(hit_codes)
-            atomic_write_json(checkpoint_path, state)
-
-            if not chunk or page >= total_pages:
-                break
-            time.sleep(0.15)
-
-        phrase_index += 1
-        page = 0
-        state["search_phrase_index"] = phrase_index
-        state["search_next_page"] = 0
-        state["hit_codes"] = sorted(hit_codes)
-        atomic_write_json(checkpoint_path, state)
-
-    state["search_done"] = True
-    atomic_write_json(checkpoint_path, state)
-    print(f"Search complete. Matches: {len(hit_codes)}")
-    return state
-
 
 def main() -> None:
     args = parse_args()
@@ -514,7 +446,6 @@ def main() -> None:
         else:
             session = make_session(cookie)
             state = run_listing(session, cookie, args, root)
-            state = run_search(session, cookie, args, root, state)
             if args.local_ocr:
                 existing = collect_images(root, root / args.images_dir, state)
                 run_local_ocr(existing, result_dir, ocr_checkpoint, args.ocr_engine)
