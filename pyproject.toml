@@ -1,0 +1,33 @@
+[project]
+name = "rrk-search"
+version = "0.1.0"
+description = "Download Official Gazette OCR pages and search Persian phrases in the images."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pillow>=10.0.0",
+    "python-dotenv>=1.0.0",
+    "requests>=2.31.0",
+    "truststore>=0.10.0",
+]
+
+[dependency-groups]
+easyocr = [
+    "easyocr>=1.7.1",
+]
+paddle = [
+    "paddleocr>=2.7.0",
+    "paddlepaddle>=2.6.0",
+]
+tesseract = [
+    "pytesseract>=0.3.10",
+]
+ocr = [
+    { include-group = "easyocr" },
+    { include-group = "paddle" },
+    { include-group = "tesseract" },
+]
+
+[tool.uv]
+package = false
+default-groups = []
